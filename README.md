@@ -1,8 +1,6 @@
 # VotingDAO-MOI
 A participation-based DAO built on MOI where voting power depends on user engagement instead of token ownership.
 
-# VotingDAO on MOI — Participation-Based Governance
-
 ## Problem Statement
 
 Traditional DAOs (such as those on Ethereum) rely on token-based voting:
