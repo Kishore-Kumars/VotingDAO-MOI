@@ -195,7 +195,7 @@ This enables:
 
 ## Team Members
 
-* Kishore Kumar
+* Kishore Kumar.S
 
 
 ---
