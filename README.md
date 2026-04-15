@@ -196,7 +196,7 @@ This enables:
 ## Team Members
 
 * Kishore Kumar
-* (Add your teammates)
+
 
 ---
 
