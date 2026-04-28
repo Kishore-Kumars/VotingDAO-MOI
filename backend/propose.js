@@ -1,4 +1,4 @@
-// backend/vote.js
+// backend/propose.js
 
 import { getSigner } from "./config.js";
 import { LOGIC_ID } from "./constants.js";
@@ -9,12 +9,12 @@ async function main() {
   try {
     const wallet = await getSigner();
 
-    console.log("🗳️ Voting...");
+    console.log("📢 Creating Proposal...");
 
     const polo = new POLO();
     const calldata = polo.encode({
-      proposal_id: 0,
-      choice: true
+      title: "Increase Developer Rewards",
+      desc: "Proposal to increase the participation score reward for creating proposals."
     });
 
     const interaction = {
@@ -22,7 +22,7 @@ async function main() {
       fuel_limit: "0x10000",
 
       sender: {
-        id: wallet.address
+        id: wallet.address,
       },
 
       ix_operations: [
@@ -30,7 +30,7 @@ async function main() {
           type: 12, // LogicInvoke
           payload: {
             logic_id: LOGIC_ID,
-            callsite: "Vote",
+            callsite: "Propose",
             calldata: "0x" + Buffer.from(calldata).toString("hex")
           }
         }
@@ -38,17 +38,18 @@ async function main() {
     };
 
     const signed = await wallet.signInteraction(interaction);
-    const txHash = await wallet.sendInteraction(signed);
+    const response = await wallet.sendInteraction(signed);
 
-    console.log("📨 TX Hash:", txHash);
+    console.log("📤 TX Hash:", response);
+    console.log("⏳ Waiting for receipt...");
 
-    const receipt = await wallet.provider.getInteractionReceipt(txHash);
+    const receipt = await wallet.provider.getInteractionReceipt(response);
 
-    console.log("✅ Vote Successful!");
+    console.log("✅ Proposal Created successfully!");
     console.log(JSON.stringify(receipt, null, 2));
 
   } catch (error) {
-    console.error("❌ Vote Error:", error.message);
+    console.error("❌ Propose Error:", error.message);
   }
 }
 

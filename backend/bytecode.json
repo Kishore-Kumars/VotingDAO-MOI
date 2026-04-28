@@ -10,7 +10,7 @@
           { "label": "dao_name", "type": "string" },
           { "label": "proposal_count", "type": "u64" },
           { "label": "quorum", "type": "u64" },
-          { "label": "totalVotes", "type": "u64" }
+          { "label": "proposals", "type": "map[u64]Proposal" }
         ]
       }
     },
@@ -23,7 +23,8 @@
           { "label": "participation_score", "type": "u64" },
           { "label": "proposals_created", "type": "u64" },
           { "label": "votes_cast", "type": "u64" },
-          { "label": "is_member", "type": "bool" }
+          { "label": "is_member", "type": "bool" },
+          { "label": "voted_proposals", "type": "map[u64]bool" }
         ]
       }
     },
@@ -33,7 +34,10 @@
       "data": {
         "name": "Init",
         "kind": "deploy",
-        "accepts": [],
+        "accepts": [
+          { "label": "name", "type": "string" },
+          { "label": "quorum_min", "type": "u64" }
+        ],
         "returns": [],
         "executes": { "kind": "MORU", "bin": [] }
       }
@@ -44,7 +48,9 @@
       "data": {
         "name": "Register",
         "kind": "enlist",
-        "accepts": [],
+        "accepts": [
+          { "label": "initial_tokens", "type": "u64" }
+        ],
         "returns": [],
         "executes": { "kind": "MORU", "bin": [] }
       }
@@ -55,7 +61,10 @@
       "data": {
         "name": "Propose",
         "kind": "invokable",
-        "accepts": [],
+        "accepts": [
+          { "label": "title", "type": "string" },
+          { "label": "desc", "type": "string" }
+        ],
         "returns": [],
         "executes": { "kind": "MORU", "bin": [] }
       }
@@ -66,7 +75,10 @@
       "data": {
         "name": "Vote",
         "kind": "invokable",
-        "accepts": [],
+        "accepts": [
+          { "label": "proposal_id", "type": "u64" },
+          { "label": "choice", "type": "bool" }
+        ],
         "returns": [],
         "executes": { "kind": "MORU", "bin": [] }
       }
@@ -78,9 +90,34 @@
         "name": "GetVoteWeight",
         "kind": "invokable",
         "accepts": [],
-        "returns": [],
+        "returns": [{ "type": "u64" }],
         "executes": { "kind": "MORU", "bin": [] }
       }
+    },
+    {
+      "ptr": 8,
+      "kind": "routine",
+      "data": {
+        "name": "GetProposal",
+        "kind": "invokable",
+        "accepts": [{ "label": "id", "type": "u64" }],
+        "returns": [{ "type": "Proposal" }],
+        "executes": { "kind": "MORU", "bin": [] }
+      }
+    },
+    {
+        "ptr": 9,
+        "kind": "struct",
+        "data": {
+            "name": "Proposal",
+            "fields": [
+                { "label": "title", "type": "string" },
+                { "label": "description", "type": "string" },
+                { "label": "for_votes", "type": "u64" },
+                { "label": "against_votes", "type": "u64" },
+                { "label": "creator", "type": "address" }
+            ]
+        }
     }
   ]
 }

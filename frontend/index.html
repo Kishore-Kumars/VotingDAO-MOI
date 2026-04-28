@@ -581,7 +581,7 @@ nav {
     <div class="nav-logo">
       <div class="logo-icon">⚖</div>
       <div>
-        <div class="logo-name">VotingDAO</div>
+        <div class="logo-name" id="daoNameDisplay">VotingDAO</div>
         <div class="logo-tag">Built on MOI Protocol</div>
       </div>
     </div>
@@ -747,21 +747,11 @@ nav {
 <div class="toast-container" id="toastContainer"></div>
 
 <!-- ── SCRIPTS ──────────────────────────────────────────────────────────── -->
-<script type="module">
-/*
-  INTEGRATION GUIDE:
-  ─────────────────
-  Replace the DEMO SDK object below with the real js-moi-sdk imports:
+<!-- Using UNPKG for js-moi-sdk (since we can't bundle easily in this environment) -->
+<script src="https://unpkg.com/js-moi-sdk/dist/js-moi-sdk.umd.min.js"></script>
 
-    import { JsonRpcProvider, Wallet, getLogicDriver } from "js-moi-sdk";
-
-  For a browser bundle, first run:
-    npm install js-moi-sdk
-    npx esbuild backend/bundle.js --bundle --outfile=frontend/sdk-bundle.js --format=esm
-  Then import from "./sdk-bundle.js"
-
-  The LOGIC ID comes from your `node backend/deploy.js` output.
-*/
+<script>
+const { JsonRpcProvider, Wallet, getLogicDriver } = window.MoiSdk;
 
 // ── STATE ──────────────────────────────────────────────────────────────
 const state = {
@@ -777,16 +767,13 @@ const state = {
   proposals:  [],
   activity:   [],
   totalMembers: 0,
-  quorum:     3,
-};
+  quorum:     0,
+  daoName:    '',
 
-// ── DEMO DATA ──────────────────────────────────────────────────────────
-const DEMO_PROPOSALS = [
-  { id: 1, title: "Fund Developer Grants Q2 2026", desc: "Allocate 5000 COCO from treasury to fund 3 developer grants for tools built on MOI.", status: "active",  forVotes: 340, againstVotes: 120 },
-  { id: 2, title: "Add New Track: AI Agents",       desc: "Introduce a fourth hackathon track focused on AI agents leveraging MOI participant state.", status: "active",  forVotes: 580, againstVotes: 60  },
-  { id: 3, title: "Reduce Quorum from 5 to 3",      desc: "Lower the quorum threshold to increase governance participation in early stages.", status: "passed",  forVotes: 900, againstVotes: 200 },
-  { id: 4, title: "Emergency Security Audit",       desc: "Allocate budget for third-party security audit of core DAO logic contracts.", status: "pending", forVotes: 100, againstVotes: 80  },
-];
+  provider:   null,
+  wallet:     null,
+  dao:        null
+};
 
 // ── CONNECT ────────────────────────────────────────────────────────────
 window.connectWallet = async function() {
@@ -794,96 +781,96 @@ window.connectWallet = async function() {
   const lid = document.getElementById('lidInput').value.trim();
 
   if (!pk)  { toast('error', '⚠️ Please enter your private key'); return; }
-  if (!lid) { toast('error', '⚠️ Please enter the Logic ID after deploying'); return; }
+  if (!lid) { toast('error', '⚠️ Please enter the Logic ID'); return; }
 
   toast('loading', '🔄 Connecting to MOI Babylon testnet...');
 
   try {
-    /*
-    ── REAL SDK CODE ──
-    const provider  = new JsonRpcProvider("https://voyage-rpc.moi.technology/babylon/");
-    const wallet    = new Wallet(provider);
-    await wallet.connect(pk);
-    state.dao       = await getLogicDriver(lid, wallet);
-    state.address   = await wallet.getAddress();
-    */
+    state.provider = new JsonRpcProvider("https://voyage-rpc.moi.technology/babylon/");
+    state.wallet = new Wallet(state.provider);
+    await state.wallet.connect(pk);
 
-    // DEMO SIMULATION (remove when using real SDK)
-    await sleep(1200);
-    state.address  = '0x' + Array.from({length:20},()=>Math.floor(Math.random()*16).toString(16)).join('');
-    state.logicId  = lid;
+    state.logicId = lid;
+    state.dao = await getLogicDriver(lid, state.wallet);
+    state.address = state.wallet.getAddress();
     state.connected = true;
 
+    await refreshAll();
     onConnected();
     toast('success', '✅ Connected to MOI Babylon testnet!');
   } catch(e) {
+    console.error(e);
     toast('error', '❌ Connection failed: ' + e.message);
   }
 };
 
-window.loadDemoMode = function() {
-  state.demoMode  = true;
-  state.connected = true;
-  state.address   = '0xDEMO...4a2f';
-  state.isMember  = true;
-  state.tokens    = 150;
-  state.score     = 65;
-  state.proposed  = 2;
-  state.voted     = 7;
-  state.proposals = DEMO_PROPOSALS;
-  state.totalMembers = 24;
-  state.activity = [
-    { color: 'var(--green)',  text: '<strong>0xA1b2…</strong> voted FOR proposal #2',   time: '2m ago'  },
-    { color: 'var(--cyan)',   text: '<strong>0xF3d4…</strong> created proposal #4',      time: '14m ago' },
-    { color: 'var(--green)',  text: '<strong>0xC7e8…</strong> joined the DAO',            time: '1h ago'  },
-    { color: 'var(--amber)',  text: '<strong>Proposal #3</strong> passed with 81% FOR',  time: '3h ago'  },
-    { color: 'var(--violet-lite)', text: '<strong>0xB2a1…</strong> earned 10 score pts','time': '5h ago' },
-  ];
-  onConnected();
-  toast('info', '🎭 Demo mode loaded — explore the UI!');
+async function refreshAll() {
+    try {
+        const logicState = await state.dao.persistent_state.get();
+        state.daoName = logicState.dao_name;
+        state.quorum = logicState.quorum;
+        const propCount = Number(logicState.proposal_count);
+
+        const props = [];
+        for(let i=0; i < propCount; i++) {
+            const p = await state.dao.GetProposal(i);
+            props.push({
+                id: i,
+                title: p.title,
+                desc: p.description,
+                forVotes: Number(p.for_votes),
+                againstVotes: Number(p.against_votes),
+                status: 'active' // Simplified
+            });
+        }
+        state.proposals = props.reverse();
+
+        await refreshMemberStats();
+    } catch(e) {
+        console.error("Refresh Error:", e);
+    }
+}
+
+window.refreshMemberStats = async function() {
+    try {
+        const actorState = await state.dao.participant_state.get(state.address);
+        state.isMember = actorState.is_member;
+        state.tokens = Number(actorState.token_balance);
+        state.score = Number(actorState.participation_score);
+        state.proposed = Number(actorState.proposals_created);
+        state.voted = Number(actorState.votes_cast);
+
+        updateStats();
+        updateMemberCard();
+    } catch(e) {
+        console.error("Member Stats Error:", e);
+    }
 };
 
 function onConnected() {
   document.getElementById('connectOverlay').style.display = 'none';
+  document.getElementById('daoNameDisplay').textContent = state.daoName;
 
-  const short = state.address.slice(0,6) + '...' + state.address.slice(-4);
-  document.getElementById('walletLabel').textContent   = short;
-  document.getElementById('memberAddress').textContent = short;
+  const shortAddr = short(state.address);
+  document.getElementById('walletLabel').textContent   = shortAddr;
+  document.getElementById('memberAddress').textContent = state.address;
 
   updateStats();
   renderProposals();
-  renderActivity();
   updateMemberCard();
 }
 
 // ── REGISTER ───────────────────────────────────────────────────────────
 window.registerMember = async function() {
   if (!state.connected) return;
-  if (state.isMember)  { toast('info','ℹ️ Already registered!'); return; }
-
-  toast('loading', '⏳ Calling Register endpoint...');
+  toast('loading', '⏳ Joining DAO...');
 
   try {
-    /*
-    ── REAL SDK CODE ──
-    const ix = await state.dao.Register(100);   // 100 initial tokens
+    const ix = await state.dao.Register(100);
+    toast('info', '📨 Interaction sent, waiting for receipt...');
     await ix.wait();
-    */
-    await sleep(1600);
 
-    state.isMember = true;
-    state.tokens   = 100;
-    state.score    = 0;
-    state.proposed = 0;
-    state.voted    = 0;
-    state.totalMembers += 1;
-
-    addActivity('var(--green)', `<strong>${short(state.address)}</strong> joined the DAO`, 'just now');
-    updateStats(); updateMemberCard();
-
-    document.getElementById('registerBtnWrap').style.display = 'none';
-    document.getElementById('memberActions').style.display   = 'block';
-
+    await refreshMemberStats();
     toast('success', '🎉 Registered! You got 100 governance tokens.');
   } catch(e) { toast('error', '❌ ' + e.message); }
 };
@@ -894,41 +881,24 @@ window.createProposal = async function() {
 
   const title = document.getElementById('propTitle').value.trim();
   const desc  = document.getElementById('propDesc').value.trim();
-
   if (!title) { toast('error','⚠️ Title is required'); return; }
 
   const btn = document.getElementById('proposeBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Submitting...';
-
-  toast('loading','⏳ Calling Propose endpoint on MOI...');
+  toast('loading','⏳ Creating proposal...');
 
   try {
-    /*
-    ── REAL SDK CODE ──
-    const ix = await state.dao.Propose();
+    const ix = await state.dao.Propose(title, desc);
     await ix.wait();
-    */
-    await sleep(1800);
-
-    const newProp = {
-      id: state.proposals.length + 1,
-      title, desc: desc || 'No description provided.',
-      status: 'active', forVotes: 0, againstVotes: 0,
-    };
-
-    state.proposals.unshift(newProp);
-    state.score   += 10;
-    state.proposed += 1;
-    state.totalMembers = state.totalMembers; // unchanged
 
     document.getElementById('propTitle').value = '';
     document.getElementById('propDesc').value  = '';
 
-    addActivity('var(--cyan)', `<strong>${short(state.address)}</strong> created proposal #${newProp.id}`, 'just now');
-    updateStats(); renderProposals(); renderActivity(); updateMemberCard();
+    await refreshAll();
+    renderProposals();
 
-    toast('success','📢 Proposal created! +10 participation score earned.');
+    toast('success','📢 Proposal created! +10 score earned.');
   } catch(e) { toast('error','❌ ' + e.message); }
   finally {
     btn.disabled = false;
@@ -941,44 +911,24 @@ window.castVote = async function(proposalId, support) {
   if (!state.isMember) { toast('error','⚠️ Register first!'); return; }
 
   const label = support ? 'FOR' : 'AGAINST';
-  toast('loading',`⏳ Casting ${label} vote on MOI...`);
+  toast('loading',`⏳ Casting ${label} vote...`);
 
   try {
-    /*
-    ── REAL SDK CODE ──
-    const ix = await state.dao.Vote();
+    const ix = await state.dao.Vote(proposalId, support);
     await ix.wait();
-    */
-    await sleep(1600);
 
-    const prop = state.proposals.find(p => p.id === proposalId);
-    if (prop) {
-      if (support) prop.forVotes     += (state.tokens + state.score);
-      else         prop.againstVotes += (state.tokens + state.score);
-    }
+    await refreshAll();
+    renderProposals();
 
-    state.score += 5;
-    state.voted += 1;
-
-    addActivity('var(--green)', `<strong>${short(state.address)}</strong> voted ${label} proposal #${proposalId}`, 'just now');
-    updateStats(); renderProposals(); renderActivity(); updateMemberCard();
-
-    toast('success',`✅ Voted ${label}! +5 participation score earned.`);
+    toast('success',`✅ Voted ${label}! +5 score earned.`);
   } catch(e) { toast('error','❌ ' + e.message); }
-};
-
-window.refreshMemberStats = async function() {
-  toast('loading','⏳ Fetching your participant state...');
-  await sleep(1000);
-  updateMemberCard();
-  toast('success','✅ Stats refreshed from MOI participant state.');
 };
 
 window.refreshProposals = async function() {
   toast('loading','⏳ Loading proposals...');
-  await sleep(800);
+  await refreshAll();
   renderProposals();
-  toast('success','✅ Proposals refreshed.');
+  toast('success', '✅ Proposals refreshed.');
 };
 
 // ── RENDER FUNCTIONS ───────────────────────────────────────────────────
@@ -992,16 +942,14 @@ function renderProposals() {
   container.innerHTML = state.proposals.map(p => {
     const total   = p.forVotes + p.againstVotes || 1;
     const forPct  = Math.round((p.forVotes / total) * 100);
-    const statusClass = { active:'status-active', passed:'status-passed', failed:'status-failed', pending:'status-pending' }[p.status] || 'status-active';
-    const statusLabel = { active:'🟢 Active', passed:'✅ Passed', failed:'❌ Failed', pending:'🟡 Pending' }[p.status] || 'Active';
 
-    const canVote = p.status === 'active' && state.isMember;
+    const canVote = state.isMember;
 
     return `
     <div class="proposal-card">
       <div class="proposal-top">
         <span class="proposal-id">#${p.id}</span>
-        <span class="proposal-status ${statusClass}">${statusLabel}</span>
+        <span class="proposal-status status-active">🟢 Active</span>
       </div>
       <div class="proposal-title">${p.title}</div>
       <div class="proposal-desc">${p.desc}</div>
@@ -1018,9 +966,6 @@ function renderProposals() {
         </button>
         <button class="btn btn-red btn-sm" onclick="castVote(${p.id},false)" ${canVote?'':'disabled'}>
           👎 Vote Against
-        </button>
-        <button class="btn btn-ghost btn-sm" onclick="viewOnExplorer('${p.id}')">
-          🔍 Explorer
         </button>
       </div>
     </div>`;
@@ -1044,46 +989,23 @@ function updateMemberCard() {
   if (state.isMember) {
     document.getElementById('registerBtnWrap').style.display = 'none';
     document.getElementById('memberActions').style.display   = 'block';
+  } else {
+    document.getElementById('registerBtnWrap').style.display = 'block';
+    document.getElementById('memberActions').style.display   = 'none';
   }
 }
 
 function updateStats() {
-  document.getElementById('statMembers').textContent  = state.totalMembers;
+  document.getElementById('statMembers').textContent  = '—'; // Would need another state field
   document.getElementById('statProposals').textContent = state.proposals.length;
   document.getElementById('statQuorum').textContent   = state.quorum;
   document.getElementById('statWeight').textContent   = state.tokens + state.score;
 }
 
-function renderActivity() {
-  const el = document.getElementById('activityFeed');
-  if (!state.activity.length) return;
-  el.innerHTML = state.activity.slice(0,6).map(a => `
-    <div class="activity-item">
-      <div class="activity-dot" style="background:${a.color}"></div>
-      <div class="activity-text">${a.text}</div>
-      <div class="activity-time">${a.time}</div>
-    </div>`).join('');
-}
-
-function addActivity(color, text, time) {
-  state.activity.unshift({ color, text, time });
-  renderActivity();
-}
-
 // ── UTILITIES ──────────────────────────────────────────────────────────
-window.viewOnExplorer = function(id) {
-  toast('info', '🔍 Open voyage.moi.technology to see this interaction');
-};
-
-window.showDisconnect = function() {
-  toast('info', '💡 Refresh page to disconnect');
-};
-
 function short(addr) {
   return addr.slice(0,6) + '...' + addr.slice(-4);
 }
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ── TOAST ──────────────────────────────────────────────────────────────
 function toast(type, message) {
@@ -1099,8 +1021,9 @@ function toast(type, message) {
     setTimeout(() => el.remove(), 300); }, timeout);
 }
 
-// ── INIT ───────────────────────────────────────────────────────────────
-updateStats();
+window.loadDemoMode = function() {
+    toast('info', 'Demo mode disabled. Please connect with your MOI credentials.');
+}
 </script>
 
 </body>

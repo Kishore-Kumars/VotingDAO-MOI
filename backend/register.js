@@ -1,4 +1,4 @@
-// backend/vote.js
+// backend/register.js
 
 import { getSigner } from "./config.js";
 import { LOGIC_ID } from "./constants.js";
@@ -9,12 +9,11 @@ async function main() {
   try {
     const wallet = await getSigner();
 
-    console.log("🗳️ Voting...");
+    console.log("📝 Registering Member...");
 
     const polo = new POLO();
     const calldata = polo.encode({
-      proposal_id: 0,
-      choice: true
+      initial_tokens: 100
     });
 
     const interaction = {
@@ -30,7 +29,7 @@ async function main() {
           type: 12, // LogicInvoke
           payload: {
             logic_id: LOGIC_ID,
-            callsite: "Vote",
+            callsite: "Register",
             calldata: "0x" + Buffer.from(calldata).toString("hex")
           }
         }
@@ -44,11 +43,11 @@ async function main() {
 
     const receipt = await wallet.provider.getInteractionReceipt(txHash);
 
-    console.log("✅ Vote Successful!");
+    console.log("✅ Registration Successful!");
     console.log(JSON.stringify(receipt, null, 2));
 
   } catch (error) {
-    console.error("❌ Vote Error:", error.message);
+    console.error("❌ Register Error:", error.message);
   }
 }
 
