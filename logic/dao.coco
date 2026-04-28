@@ -1,10 +1,18 @@
 coco VotingDAO
 
+struct Proposal:
+    title String
+    description String
+    for_votes U64
+    against_votes U64
+    creator Identifier
+
 // ── SHARED STATE (lives once, globally) ───────────────────────────────────
 state logic:
     dao_name        String
     proposal_count  U64
     quorum          U64
+    proposals       Map<U64, Proposal>
 
 // ── PARTICIPANT STATE (each member gets their own copy) ───────────────────
 state actor:
@@ -13,6 +21,7 @@ state actor:
     proposals_created    U64
     votes_cast           U64
     is_member            Bool
+    voted_proposals      Map<U64, Bool>
 
 
 // ── DEPLOY: called once when the DAO is first created ─────────────────────
@@ -34,10 +43,23 @@ endpoint enlist Register(initial_tokens U64):
 
 // ── DYNAMIC: create a proposal ────────────────────────────────────────────
 // Anyone who is a member can propose. Their score increases for doing so.
-endpoint dynamic Propose():
+endpoint dynamic Propose(title String, desc String):
     // Increment global proposal count
     mutate count <- VotingDAO.Logic.proposal_count:
+        let proposal_id = count
         count += 1
+
+        // Create new proposal
+        let new_proposal = Proposal{
+            title: title,
+            description: desc,
+            for_votes: 0,
+            against_votes: 0,
+            creator: VotingDAO.Sender.Identifier
+        }
+
+        mutate proposals <- VotingDAO.Logic.proposals:
+            proposals[proposal_id] = new_proposal
 
     // Reward proposer: bump their participation score
     mutate score <- VotingDAO.Sender.participation_score:
@@ -50,7 +72,25 @@ endpoint dynamic Propose():
 
 // ── DYNAMIC: cast a vote ──────────────────────────────────────────────────
 // Voting earns participation score, which increases future vote weight
-endpoint dynamic Vote():
+endpoint dynamic Vote(proposal_id U64, choice Bool):
+    // Check if already voted
+    mutate voted_map <- VotingDAO.Sender.voted_proposals:
+        if voted_map[proposal_id]:
+             throw "Already voted"
+        voted_map[proposal_id] = true
+
+    // Calculate weight
+    let weight = (VotingDAO.Sender.token_balance + VotingDAO.Sender.participation_score)
+
+    // Update proposal votes
+    mutate proposals <- VotingDAO.Logic.proposals:
+        let prop = proposals[proposal_id]
+        if choice:
+            prop.for_votes += weight
+        else:
+            prop.against_votes += weight
+        proposals[proposal_id] = prop
+
     // Reward voter: bump their participation score
     mutate score <- VotingDAO.Sender.participation_score:
         score += 5
@@ -60,18 +100,10 @@ endpoint dynamic Vote():
         cast += 1
 
 
-// ── DYNAMIC: give tokens to a participant (admin use / onboarding) ─────────
-endpoint dynamic AwardTokens(recipient Identifier, amount U64):
-    mutate bal <- VotingDAO.Actor(recipient).token_balance:
-        bal += amount
-
-
 // ── DYNAMIC: compute this caller's vote weight ────────────────────────────
-// THE KEY DIFFERENTIATOR vs Ethereum:
-// vote_weight = (token_balance + participation_score) ÷ 2
-// This rewards BOTH wealth AND engagement
-endpoint dynamic GetVoteWeight():
-    mutate tokens <- VotingDAO.Sender.token_balance:
-        tokens += 0    // read-only access pattern
-    mutate score <- VotingDAO.Sender.participation_score:
-        score += 0     // read-only access pattern
+endpoint dynamic GetVoteWeight() U64:
+    return (VotingDAO.Sender.token_balance + VotingDAO.Sender.participation_score)
+
+// ── DYNAMIC: get proposal details ─────────────────────────────────────────
+endpoint dynamic GetProposal(id U64) Proposal:
+    return VotingDAO.Logic.proposals[id]
